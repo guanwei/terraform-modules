@@ -1,8 +1,3 @@
-variable "consul_address" {
-  type    = string
-  default = "127.0.0.1:8500"
-}
-
 variable "vpc_id" {
   type    = string
   default = ""
@@ -155,6 +150,11 @@ variable "user_data_file" {
 variable "playbook_file" {
   type    = string
   default = ""
+}
+
+variable "playbook_extra_vars" {
+  type    = map(string)
+  default = {}
 }
 
 # variable "consul_datacenter" {
