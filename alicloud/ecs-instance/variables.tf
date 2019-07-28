@@ -147,6 +147,11 @@ variable "user_data_file" {
   default = ""
 }
 
+variable "sleep_time" {
+  type    = number
+  default = 0
+}
+
 variable "playbook_file" {
   type    = string
   default = ""
