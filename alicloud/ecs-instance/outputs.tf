@@ -39,7 +39,7 @@ output "host_names" {
 }
 
 output "public_ips" {
-  value = "${alicloud_instance.default.*.public_ip}"
+  value = "${length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address}"
 }
 
 output "private_ips" {
