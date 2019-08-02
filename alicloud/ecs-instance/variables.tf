@@ -147,6 +147,11 @@ variable "user_data_file" {
   default = ""
 }
 
+variable "eip" {
+  type    = map(string)
+  default = {}
+}
+
 variable "sleep_time" {
   type    = number
   default = 0

@@ -59,7 +59,7 @@ resource "alicloud_instance" "default" {
   private_ip = "${length(var.private_ips) > 0 ? element(var.private_ips, count.index) : var.private_ip}"
 
   internet_charge_type       = "${var.internet_charge_type}"
-  internet_max_bandwidth_out = "${var.internet_max_bandwidth_out}"
+  internet_max_bandwidth_out = "${length(var.eip) == 0 ? var.internet_max_bandwidth_out : 0}"
 
   password = "${var.password}"
   key_name = "${var.key_name}"
@@ -86,6 +86,20 @@ resource "alicloud_instance" "default" {
   lifecycle {
     create_before_destroy = true
   }
+}
+
+resource "alicloud_eip" "default" {
+  count                = "${length(var.eip) == 0 ? 0 : var.instance_count}"
+  bandwidth            = "${lookup(var.eip, "bandwidth", 5)}"
+  internet_charge_type = "${lookup(var.eip, "internet_charge_type", "PayByTraffic")}"
+  instance_charge_type = "${lookup(var.eip, "instance_charge_type", "PostPaid")}"
+  isp                  = "${lookup(var.eip, "isp", "BGP")}"
+}
+
+resource "alicloud_eip_association" "default" {
+  count         = "${length(var.eip) == 0 ? 0 : var.instance_count}"
+  allocation_id = "${element(alicloud_eip.default.*.id, count.index)}"
+  instance_id   = "${element(alicloud_instance.default.*.id, count.index)}"
 }
 
 resource "null_resource" "ansible_with_password" {
