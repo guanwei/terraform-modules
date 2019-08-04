@@ -108,7 +108,7 @@ resource "null_resource" "ansible_with_password" {
     command = "sleep ${var.sleep_time}"
   }
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${join(",", alicloud_instance.default.*.public_ip)},' -u '${var.username}' -e 'ansible_password=\"${var.password}\" host_key_checking=false ${join(" ", [for k, v in var.playbook_extra_vars : "${k}=\"${v}\""])}' ${var.playbook_file}"
+    command = "ansible-playbook -i '${join(",", length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address)},' -u '${var.username}' -e 'ansible_password=\"${var.password}\" host_key_checking=false ${join(" ", [for k, v in var.playbook_extra_vars : "${k}=\"${v}\""])}' ${var.playbook_file}"
   }
   triggers = {
     "instance_ids" = "${join(",", alicloud_instance.default.*.id)}"
@@ -121,7 +121,7 @@ resource "null_resource" "ansible_with_key" {
     command = "sleep ${var.sleep_time}"
   }
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${join(",", alicloud_instance.default.*.public_ip)},' -u '${var.username}' --private-key='${var.private_key_path}' -e 'host_key_checking=false ${join(" ", [for k, v in var.playbook_extra_vars : "${k}=\"${v}\""])}' ${var.playbook_file}"
+    command = "ansible-playbook -i '${join(",", length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address)},' -u '${var.username}' --private-key='${var.private_key_path}' -e 'host_key_checking=false ${join(" ", [for k, v in var.playbook_extra_vars : "${k}=\"${v}\""])}' ${var.playbook_file}"
   }
   triggers = {
     "instance_ids" = "${join(",", alicloud_instance.default.*.id)}"
