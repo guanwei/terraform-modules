@@ -110,11 +110,14 @@ resource "null_resource" "ansible_with_password" {
   provisioner "local-exec" {
     command = "ansible-playbook -i '${join(",", length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address)},' -u '${var.username}' -e 'ansible_password=\"${var.password}\" host_key_checking=false ${join(" ", [for k, v in var.playbook_extra_vars : "${k}=\"${v}\""])}' ${var.playbook_file}"
   }
+
   triggers = {
     instance_ids        = "${join(",", alicloud_instance.default.*.id)}"
     playbook_extra_vars = "${join(" ", [for k, v in var.playbook_extra_vars : "${k}=\"${v}\""])}"
     playbook_file_sha1  = "${sha1(file(var.playbook_file))}"
   }
+
+  depends_on = [alicloud_eip_association.default]
 }
 
 resource "null_resource" "ansible_with_key" {
@@ -125,11 +128,14 @@ resource "null_resource" "ansible_with_key" {
   provisioner "local-exec" {
     command = "ansible-playbook -i '${join(",", length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address)},' -u '${var.username}' --private-key='${var.private_key_path}' -e 'host_key_checking=false ${join(" ", [for k, v in var.playbook_extra_vars : "${k}=\"${v}\""])}' ${var.playbook_file}"
   }
+
   triggers = {
     instance_ids        = "${join(",", alicloud_instance.default.*.id)}"
     playbook_extra_vars = "${join(" ", [for k, v in var.playbook_extra_vars : "${k}=\"${v}\""])}"
     playbook_file_sha1  = "${sha1(file(var.playbook_file))}"
   }
+
+  depends_on = [alicloud_eip_association.default]
 }
 
 ## BUG: Currently consul module has issue，once service registered on consul，will auto deregister soon.
