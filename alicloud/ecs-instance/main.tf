@@ -109,6 +109,11 @@ resource "null_resource" "ansible_with_password" {
   }
   provisioner "local-exec" {
     command = "ansible-playbook -i '${join(",", length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address)},' -u '${var.username}' -e 'ansible_password=\"${var.password}\"' --extra-vars='${jsonencode(var.playbook_extra_vars)}' ${var.playbook_file}"
+
+    environment = {
+      ANSIBLE_HOST_KEY_CHECKING = "False"
+      ANSIBLE_SSH_ARGS = "-o UserKnownHostsFile=/dev/null"
+    }
   }
 
   triggers = {
@@ -127,6 +132,11 @@ resource "null_resource" "ansible_with_key" {
   }
   provisioner "local-exec" {
     command = "ansible-playbook -i '${join(",", length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address)},' -u '${var.username}' --private-key='${var.private_key_path}' --extra-vars='${jsonencode(var.playbook_extra_vars)}' ${var.playbook_file}"
+
+    environment = {
+      ANSIBLE_HOST_KEY_CHECKING = "False"
+      ANSIBLE_SSH_ARGS = "-o UserKnownHostsFile=/dev/null"
+    }
   }
 
   triggers = {
