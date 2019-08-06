@@ -163,7 +163,7 @@ variable "playbook_file" {
 }
 
 variable "playbook_extra_vars" {
-  type    = map(string)
+  type    = map
   default = {}
 }
 
