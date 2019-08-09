@@ -103,8 +103,8 @@ resource "alicloud_eip_association" "default" {
 }
 
 locals {
-  public_ips = "${length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address}"
-  private_ips = "${alicloud_instance.default.*.private_ip}"
+  public_ips    = "${length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address}"
+  private_ips   = "${alicloud_instance.default.*.private_ip}"
   ansible_hosts = "${length(local.public_ips) == 0 ? local.private_ips : local.public_ips}"
 }
 
@@ -114,7 +114,7 @@ resource "null_resource" "ansible_with_password" {
     command = "sleep ${var.sleep_time}"
   }
   provisioner "local-exec" {
-    command =<<EOF
+    command = <<EOF
       export IFS=","
       ansible_hosts="${join(",", local.ansible_hosts)}"
       for ansible_host in $ansible_hosts; do
