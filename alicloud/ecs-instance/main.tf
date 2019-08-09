@@ -102,6 +102,12 @@ resource "alicloud_eip_association" "default" {
   instance_id   = "${element(alicloud_instance.default.*.id, count.index)}"
 }
 
+locals {
+  public_ips = "${length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address}"
+  private_ips = "${alicloud_instance.default.*.private_ip}"
+  ansible_hosts = "${length(local.public_ips) == 0 ? local.private_ips : local.public_ips}"
+}
+
 resource "null_resource" "ansible_with_password" {
   count = "${var.playbook_file != "" && var.key_name == "" ? 1 : 0}"
   provisioner "local-exec" {
@@ -110,14 +116,14 @@ resource "null_resource" "ansible_with_password" {
   provisioner "local-exec" {
     command =<<EOF
       export IFS=","
-      public_ips="${join(",", length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address)}"
-      for public_ip in $public_ips; do
-        ssh-keygen -R $public_ip
+      ansible_hosts="${join(",", local.ansible_hosts)}"
+      for ansible_host in $ansible_hosts; do
+        ssh-keygen -R $ansible_host
       done
     EOF
   }
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${join(",", length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address)},' -u '${var.username}' -e 'ansible_password=\"${var.password}\"' --extra-vars='${jsonencode(var.playbook_extra_vars)}' ${var.playbook_file}"
+    command = "ansible-playbook -i '${join(",", local.ansible_hosts)},' -u '${var.username}' -e 'ansible_password=\"${var.password}\"' --extra-vars='${jsonencode(var.playbook_extra_vars)}' ${var.playbook_file}"
 
     environment = {
       ANSIBLE_HOST_KEY_CHECKING = "False"
@@ -139,7 +145,7 @@ resource "null_resource" "ansible_with_key" {
     command = "sleep ${var.sleep_time}"
   }
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${join(",", length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address)},' -u '${var.username}' --private-key='${var.private_key_path}' --extra-vars='${jsonencode(var.playbook_extra_vars)}' ${var.playbook_file}"
+    command = "ansible-playbook -i '${join(",", local.ansible_hosts)},' -u '${var.username}' --private-key='${var.private_key_path}' --extra-vars='${jsonencode(var.playbook_extra_vars)}' ${var.playbook_file}"
 
     environment = {
       ANSIBLE_HOST_KEY_CHECKING = "False"
