@@ -6,31 +6,31 @@ Terraform module which creates EC2 instance(s) in Alicloud VPC.
 
 ```terraform
 module "tf-instance" {
-    source = "git::git@code.aliyun.com:cdi-hsc/terraform-modules.git//alicloud/ecs-instance"
+  source = "git::git@code.aliyun.com:cdi-hsc/terraform-modules.git//alicloud/ecs-instance"
 
-    name     = "ecs_instance"
-    image_id = "centos_7_06_64_20G_alibase_20190711.vhd"
-    key_name = "for-ecs-instance-module"
-    vpc_id   = "vpc-wqrw3c423"
-    security_group_rules = [
+  name     = "ecs_instance"
+  image_id = "centos_7_06_64_20G_alibase_20190711.vhd"
+  key_name = "for-ecs-instance-module"
+  vpc_id   = "vpc-wqrw3c423"
+  security_group_rules = [
     {
-        type        = "ingress"
-        ip_protocol = "tcp"
-        nic_type    = "intranet"
-        policy      = "accept"
-        port_range  = "22/22"
-        priority    = 1
-        cidr_ip     = "0.0.0.0/0"
+      type        = "ingress"
+      ip_protocol = "tcp"
+      nic_type    = "intranet"
+      policy      = "accept"
+      port_range  = "22/22"
+      priority    = 1
+      cidr_ip     = "0.0.0.0/0"
     },
-    ]
-    eip = {
+  ]
+  eip = {
     bandwidth = 100
-    }
-    sleep_time    = 60
-    playbook_file = "playbook.yml"
-    playbook_extra_vars = {
+  }
+  sleep_time    = 60
+  playbook_file = "playbook.yml"
+  playbook_extra_vars = {
     key = "value"
-    }
+  }
 }
 ```
 
