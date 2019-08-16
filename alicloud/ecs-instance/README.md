@@ -40,8 +40,8 @@ You can use this in your terraform template with the following steps.
 
 2. Setting `access_key` and `secret_key` values through environment variables:
 
-    - ALICLOUD_ACCESS_KEY
-    - ALICLOUD_SECRET_KEY
+- ALICLOUD_ACCESS_KEY
+- ALICLOUD_SECRET_KEY
 
 ## Authors
 
