@@ -19,13 +19,14 @@ data "alicloud_zones" "default" {
 }
 
 data "alicloud_vswitches" "default" {
-  zone_id = "${data.alicloud_zones.default.zones.0.id}"
-  vpc_id  = "${var.vpc_id == "" ? data.alicloud_vpcs.default.vpcs.0.id : var.vpc_id}"
+  name_regex = "${var.vswitch_name_regex}"
+  zone_id    = "${data.alicloud_zones.default.zones.0.id}"
+  vpc_id     = "${var.vpc_id == "" ? data.alicloud_vpcs.default.vpcs.0.id : var.vpc_id}"
 }
 
 data "alicloud_images" "default" {
   most_recent = true
-  owners      = "system"
+  owners      = "${var.image_owners}"
   name_regex  = "${var.image_name_regex}"
 }
 
@@ -81,7 +82,11 @@ resource "alicloud_instance" "default" {
   tags        = "${var.tags}"
   volume_tags = "${var.volume_tags}"
 
-  user_data = "${var.user_data_file == "" ? "" : file(var.user_data_file)}"
+  user_data = "${var.user_data_file == "" ? var.user_data : file(var.user_data_file)}"
+
+  provisioner "local-exec" {
+    command = "sleep ${var.sleep_time}"
+  }
 
   lifecycle {
     create_before_destroy = true
@@ -103,18 +108,17 @@ resource "alicloud_eip_association" "default" {
 }
 
 locals {
-  public_ips    = "${length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address}"
-  private_ips   = "${alicloud_instance.default.*.private_ip}"
-  ansible_hosts = "${length(local.public_ips) == 0 ? local.private_ips : local.public_ips}"
+  public_ips         = "${length(var.eip) == 0 ? alicloud_instance.default.*.public_ip : alicloud_eip.default.*.ip_address}"
+  private_ips        = "${alicloud_instance.default.*.private_ip}"
+  ansible_hosts      = "${length(local.public_ips[0]) == 0 ? local.private_ips : local.public_ips}"
+  ansible_roles_path = "${var.ansible_roles_path == "" && var.ansible_playbook_file != "" ? "${dirname(var.ansible_playbook_file)}/roles" : var.ansible_roles_path}"
 }
 
 resource "null_resource" "ansible_with_password" {
-  count = "${var.playbook_file != "" && var.key_name == "" ? 1 : 0}"
-  provisioner "local-exec" {
-    command = "sleep ${var.sleep_time}"
-  }
+  count = "${var.ansible_playbook_file != "" && var.key_name == "" && length(var.ansible_server) == 0 ? 1 : 0}"
   provisioner "local-exec" {
     command = <<EOF
+      touch ~/.ssh/known_hosts
       export IFS=","
       ansible_hosts="${join(",", local.ansible_hosts)}"
       for ansible_host in $ansible_hosts; do
@@ -123,42 +127,156 @@ resource "null_resource" "ansible_with_password" {
     EOF
   }
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${join(",", local.ansible_hosts)},' -u '${var.username}' -e 'ansible_password=\"${var.password}\"' --extra-vars='${jsonencode(var.playbook_extra_vars)}' ${var.playbook_file}"
-
+    command = "ansible-playbook --flush-cache -i '${join(",", local.ansible_hosts)},' -u '${var.username}' -e 'ansible_password=\"${var.password}\"' --extra-vars='${jsonencode(var.ansible_playbook_extra_vars)}' ${var.ansible_playbook_file}"
     environment = {
       ANSIBLE_HOST_KEY_CHECKING = "False"
+      ANSIBLE_ROLES_PATH        = "${local.ansible_roles_path}"
     }
   }
 
   triggers = {
-    instance_ids        = "${join(",", alicloud_instance.default.*.id)}"
-    playbook_extra_vars = "${jsonencode(var.playbook_extra_vars)}"
-    playbook_file_sha1  = "${sha1(file(var.playbook_file))}"
+    instance_ids                = "${join(",", alicloud_instance.default.*.id)}"
+    ansible_playbook_extra_vars = "${jsonencode(var.ansible_playbook_extra_vars)}"
+    ansible_playbook_file_sha1  = "${sha1(file(var.ansible_playbook_file))}"
   }
 
-  depends_on = [alicloud_eip_association.default]
+  depends_on = ["alicloud_eip_association.default"]
+}
+
+resource "null_resource" "remote_ansible_with_password" {
+  count = "${var.ansible_playbook_file != "" && var.key_name == "" && length(var.ansible_server) > 0 ? 1 : 0}"
+  provisioner "remote-exec" {
+    inline = [
+      "mkdir -p ~/.ansible/roles/",
+    ]
+  }
+  provisioner "file" {
+    source      = "${var.ansible_playbook_file}"
+    destination = "/tmp/"
+  }
+  provisioner "file" {
+    source      = "${local.ansible_roles_path}/"
+    destination = "~/.ansible/roles/"
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "touch ~/.ssh/known_hosts",
+      "export IFS=','",
+      "ansible_hosts='${join(",", local.ansible_hosts)}'",
+      "for ansible_host in $$ansible_hosts; do",
+      "ssh-keygen -R $$ansible_host",
+      "done",
+    ]
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "export ANSIBLE_HOST_KEY_CHECKING=False",
+      "ansible-playbook --flush-cache -i '${join(",", local.ansible_hosts)},' -u '${var.username}' -e 'ansible_password=\"${var.password}\"' --extra-vars='${jsonencode(var.ansible_playbook_extra_vars)}' /tmp/${basename(var.ansible_playbook_file)}",
+    ]
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "${lookup(var.ansible_server, "user", "root")}"
+    password    = "${lookup(var.ansible_server, "password", null)}"
+    private_key = "${lookup(var.ansible_server, "private_key", null)}"
+    host        = "${lookup(var.ansible_server, "host", null)}"
+    port        = "${lookup(var.ansible_server, "port", 22)}"
+    timeout     = "${lookup(var.ansible_server, "timeout", null)}"
+  }
+
+  triggers = {
+    instance_ids                = "${join(",", alicloud_instance.default.*.id)}"
+    ansible_playbook_extra_vars = "${jsonencode(var.ansible_playbook_extra_vars)}"
+    ansible_playbook_file_sha1  = "${sha1(file(var.ansible_playbook_file))}"
+  }
+
+  depends_on = ["alicloud_eip_association.default"]
 }
 
 resource "null_resource" "ansible_with_key" {
-  count = "${var.playbook_file != "" && var.key_name != "" ? 1 : 0}"
+  count = "${var.ansible_playbook_file != "" && var.key_name != "" && length(var.ansible_server) == 0 ? 1 : 0}"
   provisioner "local-exec" {
-    command = "sleep ${var.sleep_time}"
+    command = <<EOF
+      touch ~/.ssh/known_hosts
+      export IFS=","
+      ansible_hosts="${join(",", local.ansible_hosts)}"
+      for ansible_host in $ansible_hosts; do
+        ssh-keygen -R $ansible_host
+      done
+    EOF
   }
   provisioner "local-exec" {
-    command = "ansible-playbook -i '${join(",", local.ansible_hosts)},' -u '${var.username}' --private-key='${var.private_key_path}' --extra-vars='${jsonencode(var.playbook_extra_vars)}' ${var.playbook_file}"
-
+    command = "ansible-playbook --flush-cache -i '${join(",", local.ansible_hosts)},' -u '${var.username}' --private-key='${var.private_key_path}' --extra-vars='${jsonencode(var.ansible_playbook_extra_vars)}' ${var.ansible_playbook_file}"
     environment = {
       ANSIBLE_HOST_KEY_CHECKING = "False"
+      ANSIBLE_ROLES_PATH        = "${local.ansible_roles_path}"
     }
   }
 
   triggers = {
-    instance_ids        = "${join(",", alicloud_instance.default.*.id)}"
-    playbook_extra_vars = "${jsonencode(var.playbook_extra_vars)}"
-    playbook_file_sha1  = "${sha1(file(var.playbook_file))}"
+    instance_ids                = "${join(",", alicloud_instance.default.*.id)}"
+    ansible_playbook_extra_vars = "${jsonencode(var.ansible_playbook_extra_vars)}"
+    ansible_playbook_file_sha1  = "${sha1(file(var.ansible_playbook_file))}"
   }
 
-  depends_on = [alicloud_eip_association.default]
+  depends_on = ["alicloud_eip_association.default"]
+}
+
+resource "null_resource" "remote_ansible_with_key" {
+  count = "${var.ansible_playbook_file != "" && var.key_name != "" && length(var.ansible_server) > 0 ? 1 : 0}"
+  provisioner "remote-exec" {
+    inline = [
+      "mkdir -p ~/.ansible/roles/",
+    ]
+  }
+  provisioner "file" {
+    source      = "${var.private_key_path}"
+    destination = "/tmp/${basename(var.private_key_path)}"
+  }
+  provisioner "file" {
+    source      = "${var.ansible_playbook_file}"
+    destination = "/tmp/${basename(var.ansible_playbook_file)}"
+  }
+  provisioner "file" {
+    source      = "${local.ansible_roles_path}/"
+    destination = "~/.ansible/roles/"
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "touch ~/.ssh/known_hosts",
+      "export IFS=','",
+      "ansible_hosts='${join(",", local.ansible_hosts)}'",
+      "for ansible_host in $ansible_hosts; do",
+      "  ssh-keygen -R $ansible_host",
+      "done",
+    ]
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "export ANSIBLE_HOST_KEY_CHECKING=False",
+      "chmod 0600 /tmp/${basename(var.private_key_path)}",
+      "ansible-playbook --flush-cache -i '${join(",", local.ansible_hosts)},' -u '${var.username}' --private-key='/tmp/${basename(var.private_key_path)}' --extra-vars='${jsonencode(var.ansible_playbook_extra_vars)}' /tmp/${basename(var.ansible_playbook_file)}",
+    ]
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "${lookup(var.ansible_server, "user", "root")}"
+    password    = "${lookup(var.ansible_server, "password", null)}"
+    private_key = "${lookup(var.ansible_server, "private_key", null)}"
+    host        = "${lookup(var.ansible_server, "host", null)}"
+    port        = "${lookup(var.ansible_server, "port", 22)}"
+    timeout     = "${lookup(var.ansible_server, "timeout", null)}"
+  }
+
+  triggers = {
+    instance_ids                = "${join(",", alicloud_instance.default.*.id)}"
+    ansible_playbook_extra_vars = "${jsonencode(var.ansible_playbook_extra_vars)}"
+    ansible_playbook_file_sha1  = "${sha1(file(var.ansible_playbook_file))}"
+  }
+
+  depends_on = ["alicloud_eip_association.default"]
 }
 
 ## BUG: Currently consul module has issue，once service registered on consul，will auto deregister soon.
