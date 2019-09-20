@@ -8,6 +8,11 @@ variable "vpc_name_regex" {
   default = ".*"
 }
 
+variable "vswitch_name_regex" {
+  type    = string
+  default = ".*"
+}
+
 variable "vswitch_id" {
   type    = string
   default = ""
@@ -60,6 +65,11 @@ variable "instance_count" {
 variable "image_id" {
   type    = string
   default = ""
+}
+
+variable "image_owners" {
+  type    = string
+  default = "system"
 }
 
 variable "image_name_regex" {
@@ -142,6 +152,11 @@ variable "volume_tags" {
   default = {}
 }
 
+variable "user_data" {
+  type    = string
+  default = ""
+}
+
 variable "user_data_file" {
   type    = string
   default = ""
@@ -157,12 +172,22 @@ variable "sleep_time" {
   default = 0
 }
 
-variable "playbook_file" {
+variable "ansible_server" {
+  type    = map(string)
+  default = {}
+}
+
+variable "ansible_playbook_file" {
   type    = string
   default = ""
 }
 
-variable "playbook_extra_vars" {
+variable "ansible_roles_path" {
+  type    = string
+  default = ""
+}
+
+variable "ansible_playbook_extra_vars" {
   default = {}
 }
 
